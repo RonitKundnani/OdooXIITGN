@@ -11,7 +11,7 @@ const app = express();
 app.use(corsMiddleware);
 app.use(express.json());
 
-app.use("/", healthRoutes);
+// app.use("/", healthRoutes);
 app.use("/", authRoutes);
 
 app.listen(port, async () => {

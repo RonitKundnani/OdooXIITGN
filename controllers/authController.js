@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt");
 const { pool } = require("../config/database");
 const { bcryptSaltRounds } = require("../config/app");
 const { generateEmployeeId } = require("../utils/idGenerator");
+const { generateUniqueCompanyCode } = require("../utils/companyCodeGenerator");
 const companyModel = require("../models/companyModel");
 const userModel = require("../models/userModel");
 const systemLogModel = require("../models/systemLogModel");
@@ -13,30 +14,33 @@ async function companySignup(req, res) {
   try {
     const {
       company_name,
-      company_code,
-      company_logo,
       email,
       password,
       first_name,
       last_name,
+      phone,
       year_of_joining
     } = req.body;
 
-    if (![company_name, company_code, email, password, first_name, last_name, year_of_joining].every(Boolean)) {
-      return res.status(400).json({ ok: false, error: "All fields are required" });
+    if (![company_name, email, password, first_name, last_name, year_of_joining].every(Boolean)) {
+      return res.status(400).json({ ok: false, error: "All required fields must be provided" });
     }
 
-    const existingCompany = await companyModel.findCompanyByCodeOrName(company_code, company_name, connection);
+    // Check if company name already exists
+    const existingCompany = await companyModel.findCompanyByName(company_name, connection);
     if (existingCompany.length) {
-      return res.status(409).json({ ok: false, error: "Company already exists" });
+      return res.status(409).json({ ok: false, error: "Company name already exists" });
     }
 
-    const company_id = await companyModel.createCompany(company_code, company_name, company_logo, connection);
+    // Auto-generate unique company code from company name
+    const company_code = await generateUniqueCompanyCode(company_name, connection);
+
+    const company_id = await companyModel.createCompany(company_code, company_name, connection);
     const adminId = await generateEmployeeId(first_name, last_name, year_of_joining, company_code, connection);
     const password_hash = await bcrypt.hash(password, bcryptSaltRounds);
 
     await userModel.createUser(adminId, company_id, email, password_hash, first_name, last_name, "admin", connection);
-    await userModel.createUserProfile(adminId, connection);
+    await userModel.createUserProfile(adminId, phone, connection);
     await userModel.createEmploymentDetails(adminId, "Administration", "Company Admin", connection);
     await userModel.createFinancialDetails(adminId, connection);
     await userModel.createUserSettings(adminId, connection);
@@ -54,54 +58,6 @@ async function companySignup(req, res) {
       },
       admin_user_id: adminId
     });
-  } catch (err) {
-    await connection.rollback();
-    console.error(err);
-    return res.status(500).json({ ok: false, error: err.message });
-  } finally {
-    connection.release();
-  }
-}
-
-async function signup(req, res) {
-  const connection = await pool.getConnection();
-  await connection.beginTransaction();
-
-  try {
-    const { company_id, email, password, first_name, last_name, role, year_of_joining } = req.body;
-
-    if (![company_id, email, password, first_name, last_name, role, year_of_joining].every(Boolean)) {
-      return res.status(400).json({ ok: false, error: "All fields are required" });
-    }
-
-    const validRoles = ['admin', 'hr_officer', 'payroll_officer', 'employee'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({ ok: false, error: "Invalid role" });
-    }
-
-    const companyRows = await companyModel.findCompanyById(company_id, connection);
-    if (!companyRows.length) {
-      return res.status(404).json({ ok: false, error: "Invalid company_id" });
-    }
-
-    const existing = await userModel.findUserByCompanyAndEmail(company_id, email, connection);
-    if (existing.length) {
-      return res.status(409).json({ ok: false, error: "Email already registered for this company" });
-    }
-
-    const id = await generateEmployeeId(first_name, last_name, year_of_joining, companyRows[0].company_code, connection);
-    const password_hash = await bcrypt.hash(password, bcryptSaltRounds);
-
-    await userModel.createUser(id, company_id, email, password_hash, first_name, last_name, role, connection);
-    await userModel.createUserProfile(id, connection);
-    await userModel.createEmploymentDetails(id, "Unassigned", "New Hire", connection);
-    await userModel.createFinancialDetails(id, connection);
-    await userModel.createUserSettings(id, connection);
-    await systemLogModel.createSystemLog(id, company_id, 'USER_CREATED', 'New user account created via signup API', 'auth', connection);
-
-    await connection.commit();
-
-    return res.json({ ok: true, message: "Signup successful", user_id: id });
   } catch (err) {
     await connection.rollback();
     console.error(err);
@@ -148,6 +104,5 @@ async function login(req, res) {
 
 module.exports = {
   companySignup,
-  signup,
   login
 };

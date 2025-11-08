@@ -18,8 +18,11 @@ async function createUser(id, company_id, email, password_hash, first_name, last
   );
 }
 
-async function createUserProfile(user_id, connection) {
-  await connection.query("INSERT INTO user_profiles (user_id) VALUES (?)", [user_id]);
+async function createUserProfile(user_id, phone, connection) {
+  await connection.query(
+    "INSERT INTO user_profiles (user_id, phone) VALUES (?, ?)", 
+    [user_id, phone || null]
+  );
 }
 
 async function createEmploymentDetails(user_id, department, job_position, connection) {
