@@ -5,6 +5,7 @@ const { port } = require("./config/app");
 const corsMiddleware = require("./middlewares/cors");
 const healthRoutes = require("./routes/healthRoutes");
 const authRoutes = require("./routes/authRoutes");
+const employeeRoutes = require("./routes/employeeRoutes");
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use("/", healthRoutes);
 app.use("/", authRoutes);
+app.use("/", employeeRoutes);
 
 app.listen(port, async () => {
   try {
