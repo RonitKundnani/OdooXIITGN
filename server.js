@@ -7,6 +7,9 @@ const healthRoutes = require("./routes/healthRoutes");
 const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
+const leaveRoutes = require("./routes/leaveRoutes");
+const salaryRoutes = require("./routes/salaryRoutes");
+const payrollRoutes = require("./routes/payrollRoutes");
 
 const app = express();
 
@@ -17,6 +20,9 @@ app.use(express.json());
 app.use("/", authRoutes);
 app.use("/", employeeRoutes);
 app.use("/", attendanceRoutes);
+app.use("/", leaveRoutes);
+app.use("/", salaryRoutes);
+app.use("/", payrollRoutes);
 
 app.listen(port, async () => {
   try {
