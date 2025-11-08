@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import StatsCard from '@/components/StatsCard';
 import Card from '@/components/Card';
 import DataTable from '@/components/DataTable';
@@ -10,7 +11,55 @@ import { useApp } from '@/context/AppContext';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, hasPermission } = useApp();
+  const { user, hasPermission, showToast } = useApp();
+  const [attendanceStatus, setAttendanceStatus] = useState(null);
+  const [currentTime, setCurrentTime] = useState(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Set mounted state
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
+  }, []);
+
+  // Update time every second (only on client)
+  useEffect(() => {
+    if (!mounted) return;
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, [mounted]);
+
+  // Load attendance status from localStorage
+  useEffect(() => {
+    if (!mounted || !user) return;
+    const savedStatus = localStorage.getItem(`attendance_${user?.empId}_${new Date().toDateString()}`);
+    if (savedStatus) {
+      setAttendanceStatus(JSON.parse(savedStatus));
+    }
+  }, [user, mounted]);
+
+  const handleCheckIn = () => {
+    const checkInTime = new Date().toLocaleTimeString();
+    const status = {
+      checkIn: checkInTime,
+      checkOut: null,
+      date: new Date().toDateString(),
+    };
+    setAttendanceStatus(status);
+    localStorage.setItem(`attendance_${user?.empId}_${new Date().toDateString()}`, JSON.stringify(status));
+    showToast('Checked in successfully!', 'success');
+  };
+
+  const handleCheckOut = () => {
+    const checkOutTime = new Date().toLocaleTimeString();
+    const status = {
+      ...attendanceStatus,
+      checkOut: checkOutTime,
+    };
+    setAttendanceStatus(status);
+    localStorage.setItem(`attendance_${user?.empId}_${new Date().toDateString()}`, JSON.stringify(status));
+    showToast('Checked out successfully!', 'success');
+  };
 
   const chartData = [
     { label: 'Mon', value: 45 },
@@ -44,9 +93,66 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="mb-2">
+      <div className="flex items-center justify-between mb-2">
         <p className="text-gray-600">Welcome back, {user?.name}!</p>
+        {mounted && currentTime && (
+          <div className="text-sm text-gray-500">
+            {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString()}
+          </div>
+        )}
       </div>
+
+      {/* Check In/Out Card */}
+      <Card className="p-6 bg-gradient-to-r from-[#F9F5F6] to-[#F8E8EE]">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Today's Attendance</h3>
+            <div className="flex items-center gap-6">
+              {attendanceStatus?.checkIn && (
+                <div>
+                  <span className="text-sm text-gray-600">Check In: </span>
+                  <span className="font-semibold text-green-600">{attendanceStatus.checkIn}</span>
+                </div>
+              )}
+              {attendanceStatus?.checkOut && (
+                <div>
+                  <span className="text-sm text-gray-600">Check Out: </span>
+                  <span className="font-semibold text-red-600">{attendanceStatus.checkOut}</span>
+                </div>
+              )}
+              {!attendanceStatus?.checkIn && (
+                <span className="text-sm text-gray-500">Not checked in yet</span>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            {!attendanceStatus?.checkIn ? (
+              <button
+                onClick={handleCheckIn}
+                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+              >
+                <CheckInIcon />
+                Check In
+              </button>
+            ) : !attendanceStatus?.checkOut ? (
+              <button
+                onClick={handleCheckOut}
+                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-6 py-3 rounded-lg transition-colors"
+              >
+                <CheckOutIcon />
+                Check Out
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 text-green-600">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Attendance Marked</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
 
       {/* Charts and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -131,6 +237,22 @@ function PayrollIcon() {
   return (
     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function CheckInIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+    </svg>
+  );
+}
+
+function CheckOutIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
     </svg>
   );
 }

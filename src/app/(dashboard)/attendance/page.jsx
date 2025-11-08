@@ -79,6 +79,17 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
+      {hasPermission('edit_attendance') && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white font-medium px-6 py-3 rounded-lg transition-colors"
+          >
+            + Mark Attendance
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-6">
           {user?.role !== 'Employee' && (
