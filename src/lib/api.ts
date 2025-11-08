@@ -10,6 +10,7 @@ interface LoginResponse {
   ok: boolean;
   user?: {
     id: string;
+    company_id: number;
     email: string;
     first_name: string;
     last_name: string;
@@ -53,6 +54,7 @@ export const authAPI = {
           email: data.user.email,
           role: frontendRole,
           empId: data.user.id,
+          companyId: data.user.company_id,
           avatar: null,
         };
 
@@ -120,6 +122,298 @@ export const authAPI = {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'An error occurred during signup',
+      };
+    }
+  },
+};
+
+export const employeeAPI = {
+  async getAll(company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees?company_id=${company_id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch employees');
+      }
+
+      return {
+        success: true,
+        employees: data.employees || [],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        employees: [],
+      };
+    }
+  },
+
+  async getById(id: string, company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${id}?company_id=${company_id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch employee');
+      }
+
+      return {
+        success: true,
+        employee: data.employee,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+
+  async add(employeeData: any) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(employeeData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add employee');
+      }
+
+      return {
+        success: true,
+        employee: data.employee,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+
+  async update(id: string, employeeData: any) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(employeeData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update employee');
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+};
+
+export const attendanceAPI = {
+  async checkIn(user_id: string, company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/check-in`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_id, company_id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check in');
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+
+  async checkOut(user_id: string, company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/check-out`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_id, company_id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check out');
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+
+  async getTodayStatus(user_id: string) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/today?user_id=${user_id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get status');
+      }
+
+      return {
+        success: true,
+        attendance: data.attendance,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        attendance: null,
+      };
+    }
+  },
+
+  async getAll(company_id: number, user_id?: string, start_date?: string, end_date?: string) {
+    try {
+      let url = `${API_BASE_URL}/attendance?company_id=${company_id}`;
+      if (user_id) url += `&user_id=${user_id}`;
+      if (start_date) url += `&start_date=${start_date}`;
+      if (end_date) url += `&end_date=${end_date}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch attendance');
+      }
+
+      return {
+        success: true,
+        attendance: data.attendance || [],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        attendance: [],
+      };
+    }
+  },
+
+  async upsert(attendanceData: any) {
+    try {
+      const url = attendanceData.id 
+        ? `${API_BASE_URL}/attendance/${attendanceData.id}`
+        : `${API_BASE_URL}/attendance`;
+      
+      const response = await fetch(url, {
+        method: attendanceData.id ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(attendanceData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save attendance');
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+      };
+    }
+  },
+
+  async delete(id: number, admin_user_id: string, company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ admin_user_id, company_id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete attendance');
+      }
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
       };
     }
   },

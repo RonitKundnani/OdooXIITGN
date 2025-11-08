@@ -29,36 +29,55 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [mounted]);
 
-  // Load attendance status from localStorage
+  // Load today's attendance status
   useEffect(() => {
-    if (!mounted || !user) return;
-    const savedStatus = localStorage.getItem(`attendance_${user?.empId}_${new Date().toDateString()}`);
-    if (savedStatus) {
-      setAttendanceStatus(JSON.parse(savedStatus));
-    }
+    if (!mounted || !user?.empId) return;
+    fetchTodayAttendance();
   }, [user, mounted]);
 
-  const handleCheckIn = () => {
-    const checkInTime = new Date().toLocaleTimeString();
-    const status = {
-      checkIn: checkInTime,
-      checkOut: null,
-      date: new Date().toDateString(),
-    };
-    setAttendanceStatus(status);
-    localStorage.setItem(`attendance_${user?.empId}_${new Date().toDateString()}`, JSON.stringify(status));
-    showToast('Checked in successfully!', 'success');
+  const fetchTodayAttendance = async () => {
+    if (!user?.empId) return;
+    
+    const { attendanceAPI } = await import('@/lib/api');
+    const result = await attendanceAPI.getTodayStatus(user.empId);
+    
+    if (result.success && result.attendance) {
+      setAttendanceStatus(result.attendance);
+    }
   };
 
-  const handleCheckOut = () => {
-    const checkOutTime = new Date().toLocaleTimeString();
-    const status = {
-      ...attendanceStatus,
-      checkOut: checkOutTime,
-    };
-    setAttendanceStatus(status);
-    localStorage.setItem(`attendance_${user?.empId}_${new Date().toDateString()}`, JSON.stringify(status));
-    showToast('Checked out successfully!', 'success');
+  const handleCheckIn = async () => {
+    if (!user?.empId || !user?.companyId) {
+      showToast('User information not available', 'error');
+      return;
+    }
+
+    const { attendanceAPI } = await import('@/lib/api');
+    const result = await attendanceAPI.checkIn(user.empId, user.companyId);
+    
+    if (result.success) {
+      showToast('Checked in successfully!', 'success');
+      fetchTodayAttendance();
+    } else {
+      showToast(result.error || 'Failed to check in', 'error');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!user?.empId || !user?.companyId) {
+      showToast('User information not available', 'error');
+      return;
+    }
+
+    const { attendanceAPI } = await import('@/lib/api');
+    const result = await attendanceAPI.checkOut(user.empId, user.companyId);
+    
+    if (result.success) {
+      showToast('Checked out successfully!', 'success');
+      fetchTodayAttendance();
+    } else {
+      showToast(result.error || 'Failed to check out', 'error');
+    }
   };
 
   const chartData = [
@@ -108,25 +127,35 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Today's Attendance</h3>
             <div className="flex items-center gap-6">
-              {attendanceStatus?.checkIn && (
+              {attendanceStatus?.check_in && (
                 <div>
                   <span className="text-sm text-gray-600">Check In: </span>
-                  <span className="font-semibold text-green-600">{attendanceStatus.checkIn}</span>
+                  <span className="font-semibold text-green-600">
+                    {new Date(attendanceStatus.check_in).toLocaleTimeString()}
+                  </span>
                 </div>
               )}
-              {attendanceStatus?.checkOut && (
+              {attendanceStatus?.check_out && (
                 <div>
                   <span className="text-sm text-gray-600">Check Out: </span>
-                  <span className="font-semibold text-red-600">{attendanceStatus.checkOut}</span>
+                  <span className="font-semibold text-red-600">
+                    {new Date(attendanceStatus.check_out).toLocaleTimeString()}
+                  </span>
                 </div>
               )}
-              {!attendanceStatus?.checkIn && (
+              {attendanceStatus?.work_hours && (
+                <div>
+                  <span className="text-sm text-gray-600">Hours: </span>
+                  <span className="font-semibold text-blue-600">{attendanceStatus.work_hours}h</span>
+                </div>
+              )}
+              {!attendanceStatus?.check_in && (
                 <span className="text-sm text-gray-500">Not checked in yet</span>
               )}
             </div>
           </div>
           <div className="flex gap-3">
-            {!attendanceStatus?.checkIn ? (
+            {!attendanceStatus?.check_in ? (
               <button
                 onClick={handleCheckIn}
                 className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-medium px-6 py-3 rounded-lg transition-colors"
@@ -134,7 +163,7 @@ export default function DashboardPage() {
                 <CheckInIcon />
                 Check In
               </button>
-            ) : !attendanceStatus?.checkOut ? (
+            ) : !attendanceStatus?.check_out ? (
               <button
                 onClick={handleCheckOut}
                 className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white font-medium px-6 py-3 rounded-lg transition-colors"

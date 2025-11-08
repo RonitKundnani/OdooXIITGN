@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Tabs from '@/components/Tabs';
-import DataTable from '@/components/DataTable';
-import { employees, attendance, leaves } from '@/lib/mockData';
+import { employeeAPI } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 
@@ -14,75 +13,196 @@ export default function EmployeeDetailPage() {
   const router = useRouter();
   const { showToast, user, hasPermission } = useApp();
   const [activeTab, setActiveTab] = useState('profile');
+  const [employee, setEmployee] = useState(null);
+  const [loading, setLoading] = useState(true);
   
-  const employee = employees.find(e => e.id === parseInt(params.id));
+  const [formData, setFormData] = useState({
+    // User info
+    first_name: '',
+    last_name: '',
+    email: '',
+    // User profiles
+    phone: '',
+    date_of_birth: '',
+    gender: '',
+    marital_status: '',
+    personal_email: '',
+    address: '',
+    nationality: '',
+    // Employment details
+    department: '',
+    job_position: '',
+    location: '',
+  });
+
+  useEffect(() => {
+    if (user && params.id) {
+      fetchEmployee();
+    }
+  }, [user, params.id]);
+
+  const fetchEmployee = async () => {
+    const companyId = user?.companyId || 1;
+    setLoading(true);
+
+    try {
+      const result = await employeeAPI.getById(params.id, companyId);
+      
+      if (result.success && result.employee) {
+        setEmployee(result.employee);
+        
+        // Format date_of_birth to YYYY-MM-DD for input[type="date"]
+        let formattedDate = '';
+        if (result.employee.date_of_birth) {
+          const date = new Date(result.employee.date_of_birth);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toISOString().split('T')[0];
+          }
+        }
+        
+        setFormData({
+          first_name: result.employee.first_name || '',
+          last_name: result.employee.last_name || '',
+          email: result.employee.email || '',
+          phone: result.employee.phone || '',
+          date_of_birth: formattedDate,
+          gender: result.employee.gender || '',
+          marital_status: result.employee.marital_status || '',
+          personal_email: result.employee.personal_email || '',
+          address: result.employee.address || '',
+          nationality: result.employee.nationality || '',
+          department: result.employee.department || '',
+          job_position: result.employee.job_position || '',
+          location: result.employee.location || '',
+        });
+      } else {
+        showToast(result.error || 'Employee not found', 'error');
+        router.push('/employees');
+      }
+    } catch (error) {
+      console.error('Error fetching employee:', error);
+      showToast('Failed to load employee details', 'error');
+      router.push('/employees');
+    }
+
+    setLoading(false);
+  };
   
   // If employee role, only allow viewing their own profile
-  if (user?.role === 'Employee') {
-    const ownEmployee = employees.find(e => e.empId === user.empId);
-    if (employee?.id !== ownEmployee?.id) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="text-6xl mb-4">🔒</div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-            <p className="text-gray-600">You can only view your own profile.</p>
-            <button
-              onClick={() => router.push(`/employees/${ownEmployee?.id}`)}
-              className="mt-4 px-6 py-2 bg-[#F2BED1] hover:bg-[#FDCEDF] text-white rounded-lg"
-            >
-              Go to My Profile
-            </button>
-          </div>
+  if (user?.role === 'Employee' && user?.empId !== params.id) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600">You can only view your own profile.</p>
+          <button
+            onClick={() => router.push(`/employees/${user.empId}`)}
+            className="mt-4 px-6 py-2 bg-[#F2BED1] hover:bg-[#FDCEDF] text-white rounded-lg"
+          >
+            Go to My Profile
+          </button>
         </div>
-      );
-    }
+      </div>
+    );
   }
   
-  if (!employee) {
-    return <div>Employee not found</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F2BED1] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading employee details...</p>
+        </div>
+      </div>
+    );
   }
-  
-  const canEdit = hasPermission('edit_employee') || (user?.role === 'Employee' && hasPermission('edit_own_profile'));
 
-  const [formData, setFormData] = useState({
-    name: employee.name,
-    email: employee.email,
-    phone: employee.phone,
-    dept: employee.dept,
-    role: employee.role,
+  if (!employee) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-6xl mb-4">👤</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Employee Not Found</h1>
+          <p className="text-gray-600 mb-4">The employee you're looking for doesn't exist.</p>
+          <button
+            onClick={() => router.push('/employees')}
+            className="px-6 py-2 bg-[#F2BED1] hover:bg-[#FDCEDF] text-white rounded-lg"
+          >
+            Back to Employees
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  // Check if user can edit this profile
+  // Admin and HR can edit anyone, employees can only edit their own
+  const isAdmin = user?.role === 'Admin' || user?.role === 'HR';
+  const isSelf = user?.empId === params.id;
+  const canEdit = isAdmin || isSelf;
+  
+  // Debug logging
+  console.log('Edit permissions:', {
+    userRole: user?.role,
+    userEmpId: user?.empId,
+    profileId: params.id,
+    isAdmin,
+    isSelf,
+    canEdit
   });
 
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'job', label: 'Job Info' },
-    { id: 'documents', label: 'Documents' },
-    { id: 'salary', label: 'Salary' },
-    { id: 'history', label: 'History' },
+    { id: 'financial', label: 'Financial' },
   ];
 
-  const handleSave = () => {
-    showToast('Profile updated successfully!', 'success');
+  const handleSave = async () => {
+    if (!employee) return;
+
+    const updateData = {
+      // User info
+      first_name: formData.first_name,
+      last_name: formData.last_name,
+      email: formData.email,
+      // User profiles
+      phone: formData.phone,
+      date_of_birth: formData.date_of_birth || null,
+      gender: formData.gender || null,
+      marital_status: formData.marital_status || null,
+      personal_email: formData.personal_email || null,
+      address: formData.address || null,
+      nationality: formData.nationality || null,
+      // Employment details
+      department: formData.department || null,
+      job_position: formData.job_position || null,
+      location: formData.location || null,
+      // Admin info
+      admin_user_id: user?.empId,
+    };
+
+    try {
+      const result = await employeeAPI.update(employee.id, updateData);
+      
+      if (result.success) {
+        showToast('Profile updated successfully!', 'success');
+        // Refresh employee data
+        fetchEmployee();
+      } else {
+        showToast(result.error || 'Failed to update profile', 'error');
+      }
+    } catch (error) {
+      showToast('An error occurred while updating', 'error');
+    }
   };
 
-  const empAttendance = attendance.filter(a => a.empId === employee.empId);
-  const empLeaves = leaves.filter(l => l.empId === employee.empId);
-
-  const attendanceColumns = [
-    { key: 'date', label: 'Date', sortable: true },
-    { key: 'checkIn', label: 'Check In', sortable: true },
-    { key: 'checkOut', label: 'Check Out', sortable: true },
-    { key: 'hours', label: 'Hours', sortable: true },
-    { key: 'status', label: 'Status' },
-  ];
-
-  const leaveColumns = [
-    { key: 'type', label: 'Type', sortable: true },
-    { key: 'from', label: 'From', sortable: true },
-    { key: 'to', label: 'To', sortable: true },
-    { key: 'days', label: 'Days', sortable: true },
-    { key: 'status', label: 'Status' },
-  ];
+  const roleLabels = {
+    admin: 'Admin',
+    hr_officer: 'HR Officer',
+    payroll_officer: 'Payroll Officer',
+    employee: 'Employee'
+  };
 
   return (
     <div className="space-y-6">
@@ -94,17 +214,51 @@ export default function EmployeeDetailPage() {
           >
             <BackIcon />
           </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{employee.name}</h1>
-            <p className="text-gray-600 mt-1">{employee.empId} • {employee.role}</p>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F2BED1] to-[#FDCEDF] flex items-center justify-center text-white text-2xl font-semibold">
+              {employee.first_name?.charAt(0)}{employee.last_name?.charAt(0)}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {employee.first_name} {employee.last_name}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {employee.id} • {roleLabels[employee.role] || employee.role}
+                {isSelf && <span className="ml-2 text-[#F2BED1]">(You)</span>}
+              </p>
+            </div>
           </div>
         </div>
-        <span className={`px-4 py-2 rounded-full text-sm font-medium ${
-          employee.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-        }`}>
-          {employee.status}
-        </span>
+        <div className="flex items-center gap-3">
+          {!canEdit && (
+            <span className="px-3 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+              View Only
+            </span>
+          )}
+          <span className={`px-4 py-2 rounded-full text-sm font-medium ${
+            employee.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {employee.is_active ? 'Active' : 'Inactive'}
+          </span>
+        </div>
       </div>
+
+      {/* Debug Info - Remove in production */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="p-4 mb-4 bg-yellow-50 border border-yellow-200">
+          <details>
+            <summary className="cursor-pointer font-medium text-sm">🔍 Debug Info (Click to expand)</summary>
+            <div className="mt-2 text-xs space-y-1">
+              <div><strong>Your Role:</strong> {user?.role}</div>
+              <div><strong>Your Emp ID:</strong> {user?.empId}</div>
+              <div><strong>Profile ID:</strong> {params.id}</div>
+              <div><strong>Is Admin:</strong> {isAdmin ? '✅ Yes' : '❌ No'}</div>
+              <div><strong>Is Self:</strong> {isSelf ? '✅ Yes' : '❌ No'}</div>
+              <div><strong>Can Edit:</strong> {canEdit ? '✅ Yes' : '❌ No'}</div>
+            </div>
+          </details>
+        </Card>
+      )}
 
       <Card className="p-6">
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -112,142 +266,252 @@ export default function EmployeeDetailPage() {
         <div className="mt-6">
           {activeTab === 'profile' && (
             <div className="space-y-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                     disabled={!canEdit}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter first name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                  <input
+                    type="text"
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter last name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email (Login) *</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     disabled={!canEdit}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="email@company.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
                   <input
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     disabled={!canEdit}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
                   <input
-                    type="text"
-                    value={formData.dept}
-                    onChange={(e) => setFormData({ ...formData, dept: e.target.value })}
+                    type="date"
+                    value={formData.date_of_birth}
+                    onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
                     disabled={!canEdit}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                  <input
-                    type="text"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     disabled={!canEdit}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Marital Status</label>
+                  <select
+                    value={formData.marital_status}
+                    onChange={(e) => setFormData({ ...formData, marital_status: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select Status</option>
+                    <option value="single">Single</option>
+                    <option value="married">Married</option>
+                    <option value="divorced">Divorced</option>
+                    <option value="widowed">Widowed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Personal Email</label>
+                  <input
+                    type="email"
+                    value={formData.personal_email}
+                    onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="personal@email.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Join Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
                   <input
                     type="text"
-                    value={employee.joinDate}
-                    disabled
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                    value={formData.nationality}
+                    onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="e.g., Indian"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+                  <textarea
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    disabled={!canEdit}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter full address"
                   />
                 </div>
               </div>
-              {canEdit && (
+              {canEdit ? (
                 <button
                   onClick={handleSave}
                   className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white font-medium px-6 py-2 rounded-lg"
                 >
                   Save Changes
                 </button>
+              ) : (
+                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                  ℹ️ You can only view this profile. Only admins and the employee themselves can make changes.
+                </div>
               )}
             </div>
           )}
 
           {activeTab === 'job' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <InfoItem label="Employee ID" value={employee.empId} />
-              <InfoItem label="Department" value={employee.dept} />
-              <InfoItem label="Role" value={employee.role} />
-              <InfoItem label="Join Date" value={employee.joinDate} />
-              <InfoItem label="Employment Type" value="Full Time" />
-              <InfoItem label="Work Location" value="Main Hospital" />
-            </div>
-          )}
-
-          {activeTab === 'documents' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold">Uploaded Documents</h3>
-                <button className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white px-4 py-2 rounded-lg">
-                  Upload Document
-                </button>
-              </div>
-              <div className="space-y-2">
-                {['Resume.pdf', 'ID_Proof.pdf', 'Medical_Certificate.pdf'].map((doc, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <FileIcon />
-                      <span>{doc}</span>
-                    </div>
-                    <button className="text-[#F2BED1] hover:text-[#FDCEDF]">View</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'salary' && (
             <div className="space-y-6">
-              <div className="bg-[#F8E8EE] p-6 rounded-lg">
-                <h3 className="text-lg font-semibold mb-4">Salary Breakdown</h3>
-                <div className="space-y-3">
-                  <SalaryRow label="Basic Salary" amount={employee.salary * 0.5} />
-                  <SalaryRow label="HRA" amount={employee.salary * 0.2} />
-                  <SalaryRow label="Medical Allowance" amount={1500} />
-                  <SalaryRow label="Other Allowances" amount={employee.salary * 0.3 - 1500} />
-                  <div className="border-t border-gray-300 pt-3 mt-3">
-                    <SalaryRow label="Gross Salary" amount={employee.salary} bold />
-                  </div>
-                  <SalaryRow label="Tax (10%)" amount={-employee.salary * 0.1} deduction />
-                  <SalaryRow label="Insurance (5%)" amount={-employee.salary * 0.05} deduction />
-                  <div className="border-t border-gray-300 pt-3 mt-3">
-                    <SalaryRow label="Net Salary" amount={employee.salary * 0.85} bold />
-                  </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Employment Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Employee ID</label>
+                  <input
+                    type="text"
+                    value={employee.id}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                  <input
+                    type="text"
+                    value={roleLabels[employee.role] || employee.role}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <input
+                    type="text"
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="e.g., Engineering, HR"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Job Position</label>
+                  <input
+                    type="text"
+                    value={formData.job_position}
+                    onChange={(e) => setFormData({ ...formData, job_position: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="e.g., Software Engineer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    disabled={!canEdit}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="e.g., Mumbai Office"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Join Date</label>
+                  <input
+                    type="text"
+                    value={employee.date_of_joining ? new Date(employee.date_of_joining).toLocaleDateString() : 'Not set'}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manager ID</label>
+                  <input
+                    type="text"
+                    value={employee.manager_id || 'No manager assigned'}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Login</label>
+                  <input
+                    type="text"
+                    value={employee.last_login ? new Date(employee.last_login).toLocaleString() : 'Never'}
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  />
                 </div>
               </div>
+              {canEdit ? (
+                <button
+                  onClick={handleSave}
+                  className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white font-medium px-6 py-2 rounded-lg"
+                >
+                  Save Changes
+                </button>
+              ) : (
+                <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-lg">
+                  ℹ️ You can only view this information. Only admins and the employee themselves can make changes.
+                </div>
+              )}
             </div>
           )}
 
-          {activeTab === 'history' && (
+          {activeTab === 'financial' && (
             <div className="space-y-6">
-              <div>
-                <h3 className="font-semibold mb-4">Attendance History</h3>
-                <DataTable columns={attendanceColumns} data={empAttendance} />
+              <div className="bg-[#F8E8EE] p-6 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">Financial Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InfoItem label="Bank Name" value={employee.bank_name || 'Not set'} />
+                  <InfoItem label="Account Number" value={employee.account_number || 'Not set'} />
+                  <InfoItem label="IFSC Code" value={employee.ifsc_code || 'Not set'} />
+                  <InfoItem label="PAN Number" value={employee.pan_number || 'Not set'} />
+                  <InfoItem label="UAN Number" value={employee.uan_number || 'Not set'} />
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold mb-4">Leave History</h3>
-                <DataTable columns={leaveColumns} data={empLeaves} />
+              <div className="text-sm text-gray-500">
+                <p>💡 Financial details are confidential and only visible to authorized personnel.</p>
               </div>
             </div>
           )}
@@ -266,29 +530,10 @@ function InfoItem({ label, value }) {
   );
 }
 
-function SalaryRow({ label, amount, bold, deduction }) {
-  return (
-    <div className={`flex justify-between ${bold ? 'font-semibold text-lg' : ''}`}>
-      <span>{label}</span>
-      <span className={deduction ? 'text-red-600' : ''}>
-        {formatCurrency(Math.abs(amount))}
-      </span>
-    </div>
-  );
-}
-
 function BackIcon() {
   return (
     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
     </svg>
   );
 }
