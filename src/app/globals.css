@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --primary-bg: #F9F5F6;
+  --accent-bg: #F8E8EE;
+  --button-primary: #F2BED1;
+  --button-hover: #FDCEDF;
+  --text-dark: #1F2937;
+}
+
+@theme inline {
+  --color-primary-bg: var(--primary-bg);
+  --color-accent-bg: var(--accent-bg);
+  --color-button-primary: var(--button-primary);
+  --color-button-hover: var(--button-hover);
+  --color-text-dark: var(--text-dark);
+}
+
+body {
+  background: #F9F5F6;
+  color: #1F2937;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F9F5F6;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #F2BED1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FDCEDF;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Animations */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Print styles */
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:bg-white {
+    background-color: white !important;
+  }
+}
