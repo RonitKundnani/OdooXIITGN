@@ -1,64 +1,146 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/Card';
 import Stepper from '@/components/Stepper';
 import DataTable from '@/components/DataTable';
-import { payrollData } from '@/lib/mockData';
+import { payrollAPI } from '@/lib/api';
 import { formatCurrency, exportToCSV } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from 'next/navigation';
 
 export default function PayrollRunPage() {
-  const { showToast } = useApp();
+  const { showToast, user } = useApp();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
-  const [selectedMonth, setSelectedMonth] = useState('2024-01');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [payrunId, setPayrunId] = useState(null);
+  const [payslips, setPayslips] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const steps = ['Select Month', 'Preview', 'Simulate', 'Finalize'];
+  const steps = ['Select Month', 'Preview', 'Compute', 'Finalize'];
+
+  useEffect(() => {
+    if (currentStep === 1 && payrunId) {
+      fetchPayslips();
+    }
+  }, [currentStep, payrunId]);
+
+  const fetchPayslips = async () => {
+    if (!payrunId) return;
+    
+    setLoading(true);
+    const result = await payrollAPI.getPayslipsByPayrun(payrunId);
+    
+    if (result.success) {
+      setPayslips(result.payslips);
+    } else {
+      showToast(result.error || 'Failed to fetch payslips', 'error');
+    }
+    setLoading(false);
+  };
 
   const columns = [
-    { key: 'employee', label: 'Employee', sortable: true },
-    { key: 'empId', label: 'Emp ID', sortable: true },
+    { 
+      key: 'employee', 
+      label: 'Employee', 
+      sortable: true,
+      render: (row) => `${row.first_name} ${row.last_name}`
+    },
+    { key: 'user_id', label: 'Emp ID', sortable: true },
     {
-      key: 'gross',
+      key: 'gross_salary',
       label: 'Gross',
       sortable: true,
-      render: (row) => formatCurrency(row.gross),
+      render: (row) => formatCurrency(row.gross_salary),
     },
     {
-      key: 'deductions',
+      key: 'total_deductions',
       label: 'Deductions',
       sortable: true,
-      render: (row) => formatCurrency(row.deductions),
+      render: (row) => formatCurrency(row.total_deductions),
     },
     {
-      key: 'net',
+      key: 'net_salary',
       label: 'Net Pay',
       sortable: true,
-      render: (row) => <span className="font-semibold">{formatCurrency(row.net)}</span>,
+      render: (row) => <span className="font-semibold">{formatCurrency(row.net_salary)}</span>,
     },
     {
       key: 'status',
       label: 'Status',
       render: (row) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          row.status === 'Processed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+          row.status === 'validated' ? 'bg-green-100 text-green-800' : 
+          row.status === 'computed' ? 'bg-blue-100 text-blue-800' :
+          'bg-yellow-100 text-yellow-800'
         }`}>
-          {row.status}
+          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
         </span>
       ),
     },
   ];
 
-  const totalGross = payrollData.reduce((sum, emp) => sum + emp.gross, 0);
-  const totalDeductions = payrollData.reduce((sum, emp) => sum + emp.deductions, 0);
-  const totalNet = payrollData.reduce((sum, emp) => sum + emp.net, 0);
+  const totalGross = payslips.reduce((sum, emp) => sum + parseFloat(emp.gross_salary || 0), 0);
+  const totalDeductions = payslips.reduce((sum, emp) => sum + parseFloat(emp.total_deductions || 0), 0);
+  const totalNet = payslips.reduce((sum, emp) => sum + parseFloat(emp.net_salary || 0), 0);
 
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
+  const handleNext = async () => {
+    if (currentStep === 0) {
+      // Create payrun
+      await createPayrun();
+    } else if (currentStep === 1) {
+      // Compute payroll
+      await computePayroll();
+    } else if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
+  };
+
+  const createPayrun = async () => {
+    const [year, month] = selectedMonth.split('-');
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    
+    const payrunData = {
+      company_id: user?.companyId || 1,
+      name: `${startDate.toLocaleString('default', { month: 'long' })} ${year} Payroll`,
+      pay_period_start: startDate.toISOString().split('T')[0],
+      pay_period_end: endDate.toISOString().split('T')[0],
+      created_by: user?.empId
+    };
+
+    setLoading(true);
+    const result = await payrollAPI.createPayrun(payrunData);
+    
+    if (result.success) {
+      setPayrunId(result.payrun_id);
+      setCurrentStep(1);
+      showToast('Payrun created successfully!', 'success');
+    } else {
+      showToast(result.error || 'Failed to create payrun', 'error');
+    }
+    setLoading(false);
+  };
+
+  const computePayroll = async () => {
+    if (!payrunId) return;
+
+    setLoading(true);
+    const result = await payrollAPI.computePayroll(
+      payrunId,
+      user?.empId,
+      user?.companyId || 1
+    );
+    
+    if (result.success) {
+      showToast(`Payroll computed for ${result.employee_count} employees!`, 'success');
+      await fetchPayslips();
+      setCurrentStep(2);
+    } else {
+      showToast(result.error || 'Failed to compute payroll', 'error');
+    }
+    setLoading(false);
   };
 
   const handleBack = () => {
@@ -67,15 +149,37 @@ export default function PayrollRunPage() {
     }
   };
 
-  const handleFinalize = () => {
-    showToast('Payroll processed successfully!', 'success');
-    setTimeout(() => {
-      router.push('/payroll/payslips');
-    }, 1500);
+  const handleFinalize = async () => {
+    if (!payrunId) return;
+
+    setLoading(true);
+    const result = await payrollAPI.validatePayrun(
+      payrunId,
+      user?.empId,
+      user?.companyId || 1
+    );
+    
+    if (result.success) {
+      showToast('Payroll finalized successfully!', 'success');
+      setTimeout(() => {
+        router.push('/payroll/payslips');
+      }, 1500);
+    } else {
+      showToast(result.error || 'Failed to finalize payroll', 'error');
+    }
+    setLoading(false);
   };
 
   const handleExport = () => {
-    exportToCSV(payrollData, `payroll_${selectedMonth}`);
+    const exportData = payslips.map(p => ({
+      employee: `${p.first_name} ${p.last_name}`,
+      empId: p.user_id,
+      gross: p.gross_salary,
+      deductions: p.total_deductions,
+      net: p.net_salary,
+      status: p.status
+    }));
+    exportToCSV(exportData, `payroll_${selectedMonth}`);
     showToast('Payroll data exported successfully!', 'success');
   };
 
@@ -102,12 +206,11 @@ export default function PayrollRunPage() {
                 <h3 className="font-semibold mb-2">Payroll Summary</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>Total Employees:</span>
-                    <span className="font-medium">{payrollData.length}</span>
-                  </div>
-                  <div className="flex justify-between">
                     <span>Payroll Period:</span>
                     <span className="font-medium">{selectedMonth}</span>
+                  </div>
+                  <div className="text-xs text-gray-600 mt-2">
+                    Click "Next" to create payrun and preview employees
                   </div>
                 </div>
               </div>
@@ -116,7 +219,26 @@ export default function PayrollRunPage() {
 
           {currentStep === 1 && (
             <div className="space-y-6">
-              <DataTable columns={columns} data={payrollData} />
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2BED1]"></div>
+                </div>
+              ) : payslips.length > 0 ? (
+                <>
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>{payslips.length} employees</strong> found with salary structures. Click "Next" to compute payroll.
+                    </p>
+                  </div>
+                  <DataTable columns={columns} data={payslips} />
+                </>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📋</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Ready to Compute</h3>
+                  <p className="text-gray-500">Click "Next" to compute payroll for this period.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -126,14 +248,20 @@ export default function PayrollRunPage() {
                 <div className="flex items-start gap-3">
                   <WarningIcon />
                   <div>
-                    <h3 className="font-semibold text-yellow-800">Simulation Mode</h3>
+                    <h3 className="font-semibold text-yellow-800">Review Mode</h3>
                     <p className="text-sm text-yellow-700 mt-1">
-                      This is a simulation. No actual payments will be processed. Review the data carefully before finalizing.
+                      Payroll has been computed. Review the data carefully before finalizing.
                     </p>
                   </div>
                 </div>
               </div>
-              <DataTable columns={columns} data={payrollData} />
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2BED1]"></div>
+                </div>
+              ) : (
+                <DataTable columns={columns} data={payslips} />
+              )}
             </div>
           )}
 
@@ -143,9 +271,9 @@ export default function PayrollRunPage() {
                 <div className="flex items-start gap-3">
                   <CheckIcon />
                   <div>
-                    <h3 className="font-semibold text-green-800">Ready to Process</h3>
+                    <h3 className="font-semibold text-green-800">Ready to Finalize</h3>
                     <p className="text-sm text-green-700 mt-1">
-                      All validations passed. Click "Finalize Payroll" to process payments.
+                      All validations passed. Click "Finalize Payroll" to complete the process.
                     </p>
                   </div>
                 </div>
@@ -166,14 +294,20 @@ export default function PayrollRunPage() {
                 </Card>
               </div>
 
-              <DataTable columns={columns} data={payrollData} />
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F2BED1]"></div>
+                </div>
+              ) : (
+                <DataTable columns={columns} data={payslips} />
+              )}
             </div>
           )}
         </div>
 
         <div className="flex justify-between mt-8 pt-6 border-t">
           <div>
-            {currentStep === 1 && (
+            {(currentStep === 2 || currentStep === 3) && payslips.length > 0 && (
               <button
                 onClick={handleExport}
                 className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -183,10 +317,11 @@ export default function PayrollRunPage() {
             )}
           </div>
           <div className="flex gap-3">
-            {currentStep > 0 && (
+            {currentStep > 0 && currentStep < 3 && (
               <button
                 onClick={handleBack}
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                disabled={loading}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Back
               </button>
@@ -194,16 +329,18 @@ export default function PayrollRunPage() {
             {currentStep < steps.length - 1 ? (
               <button
                 onClick={handleNext}
-                className="px-6 py-2 bg-[#F2BED1] hover:bg-[#FDCEDF] text-white rounded-lg"
+                disabled={loading}
+                className="px-6 py-2 bg-[#F2BED1] hover:bg-[#FDCEDF] text-white rounded-lg disabled:opacity-50"
               >
-                Next
+                {loading ? 'Processing...' : 'Next'}
               </button>
             ) : (
               <button
                 onClick={handleFinalize}
-                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                disabled={loading}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
               >
-                Finalize Payroll
+                {loading ? 'Processing...' : 'Finalize Payroll'}
               </button>
             )}
           </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Tabs from '@/components/Tabs';
+import SalaryInfoTab from '@/components/SalaryInfoTab';
 import { employeeAPI } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -152,10 +153,14 @@ export default function EmployeeDetailPage() {
     canEdit
   });
 
+  // Only show Salary Info tab to Admin and Payroll officers
+  const canViewSalary = user?.role === 'Admin' || user?.role === 'Payroll';
+  
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'job', label: 'Job Info' },
     { id: 'financial', label: 'Financial' },
+    ...(canViewSalary ? [{ id: 'salary', label: 'Salary Info' }] : []),
   ];
 
   const handleSave = async () => {
@@ -514,6 +519,10 @@ export default function EmployeeDetailPage() {
                 <p>💡 Financial details are confidential and only visible to authorized personnel.</p>
               </div>
             </div>
+          )}
+
+          {activeTab === 'salary' && (
+            <SalaryInfoTab userId={employee.id} companyId={user?.companyId || 1} />
           )}
         </div>
       </Card>
