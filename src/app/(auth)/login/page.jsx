@@ -3,18 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
-
-// Mock users for different roles
-const mockUsers = [
-  { email: 'admin@company.com', password: 'admin123', name: 'Admin User', role: 'Admin', empId: 'ADM001' },
-  { email: 'hr@company.com', password: 'hr123', name: 'HR Manager', role: 'HR', empId: 'HR001' },
-  { email: 'payroll@company.com', password: 'payroll123', name: 'Payroll Officer', role: 'Payroll', empId: 'PAY001' },
-  { email: 'employee@company.com', password: 'emp123', name: 'John Smith', role: 'Employee', empId: 'EMP002' },
-];
+import { authAPI } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, setUser } = useApp();
+  const { user, setUser, showToast } = useApp();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +19,7 @@ export default function LoginPage() {
     }
   }, [user, router]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -35,30 +28,25 @@ export default function LoginPage() {
       return;
     }
 
-    // Find matching user
-    const user = mockUsers.find(
-      u => u.email === formData.email && u.password === formData.password
-    );
-
-    if (!user) {
-      setError('Invalid email or password');
-      return;
-    }
-
     setLoading(true);
 
-    // Set user in context
-    setUser({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      empId: user.empId,
-      avatar: null,
-    });
+    try {
+      const result = await authAPI.login(formData.email, formData.password);
 
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 1000);
+      if (result.success && result.user) {
+        setUser(result.user);
+        showToast('Login successful! Redirecting...', 'success');
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 500);
+      } else {
+        setError(result.error || 'Login failed');
+        setLoading(false);
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -123,17 +111,17 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-600">
-            Need help? <a href="#" className="text-[#F2BED1] hover:text-[#FDCEDF]">Contact Support</a>
+            Don't have an account? <a href="/signup" className="text-[#F2BED1] hover:text-[#FDCEDF] font-medium">Sign Up</a>
           </div>
 
           {/* Demo Credentials */}
           <div className="mt-6 p-4 bg-[#F8E8EE] rounded-lg">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Demo Credentials:</h3>
             <div className="space-y-2 text-xs text-gray-700">
-              <div><strong>Admin:</strong> admin@company.com / admin123</div>
-              <div><strong>HR:</strong> hr@company.com / hr123</div>
-              <div><strong>Payroll:</strong> payroll@company.com / payroll123</div>
-              <div><strong>Employee:</strong> employee@company.com / emp123</div>
+              <div><strong>Admin:</strong> admin@demo.com / admin123</div>
+              <div className="text-xs text-gray-500 mt-2">
+                Or create your own account using the Sign Up link above
+              </div>
             </div>
           </div>
         </div>

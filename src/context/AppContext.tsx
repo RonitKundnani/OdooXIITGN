@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export type UserRole = 'Admin' | 'Employee' | 'Payroll' | 'HR';
 
@@ -72,6 +72,23 @@ const rolePermissions: Record<UserRole, string[]> = {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Restore user session on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        try {
+          setUser(JSON.parse(stored));
+        } catch (error) {
+          console.error('Failed to restore user session:', error);
+          localStorage.removeItem('user');
+        }
+      }
+      setIsLoading(false);
+    }
+  }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -84,8 +101,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return permissions.includes('*') || permissions.includes(permission);
   };
 
+  // Update localStorage when user changes
+  const updateUser = (newUser: User | null) => {
+    setUser(newUser);
+    if (typeof window !== 'undefined') {
+      if (newUser) {
+        localStorage.setItem('user', JSON.stringify(newUser));
+      } else {
+        localStorage.removeItem('user');
+      }
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F2BED1] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <AppContext.Provider value={{ user, setUser, toast, showToast, hasPermission }}>
+    <AppContext.Provider value={{ user, setUser: updateUser, toast, showToast, hasPermission }}>
       {children}
     </AppContext.Provider>
   );

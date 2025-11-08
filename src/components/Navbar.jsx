@@ -3,15 +3,18 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
+import { authAPI } from '@/lib/api';
 
 export default function Navbar({ onMenuClick }) {
   const router = useRouter();
-  const { user, setUser } = useApp();
+  const { user, setUser, showToast } = useApp();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleLogout = () => {
+    authAPI.logout();
     setUser(null);
+    showToast('Logged out successfully', 'info');
     router.push('/login');
   };
 
