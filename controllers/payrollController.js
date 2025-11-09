@@ -188,11 +188,16 @@ async function computePayroll(req, res) {
     // Delete existing payslips for this payrun
     await payrollModel.deletePayslipsByPayrun(payrun_id, connection);
 
+    // Get working days configuration from settings
+    const workingDaysPerWeek = settings.payroll_working_days_per_week || 5;
+    const considerHalfDays = settings.payroll_consider_half_days !== false; // Default true
+    const deductAbsentDays = settings.payroll_deduct_absent_days !== false; // Default true
+    
     // Calculate working days in period
     const startDate = new Date(payrun.pay_period_start);
     const endDate = new Date(payrun.pay_period_end);
     const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-    const totalWorkingDays = Math.floor(totalDays * (5/7)); // Assuming 5 working days per week
+    const totalWorkingDays = Math.floor(totalDays * (workingDaysPerWeek/7));
 
     // Generate payslips for each employee
     for (const employee of employees) {
@@ -207,17 +212,30 @@ async function computePayroll(req, res) {
 
       // Get attendance for the period
       const [attendanceRows] = await connection.query(
-        `SELECT COUNT(*) as present_days 
+        `SELECT 
+          COUNT(CASE WHEN status = 'present' THEN 1 END) as present_days,
+          COUNT(CASE WHEN status = 'half_day' THEN 1 END) as half_days,
+          COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_days
          FROM attendance 
-         WHERE user_id = ? AND date BETWEEN ? AND ? AND status = 'present'`,
+         WHERE user_id = ? AND date BETWEEN ? AND ?`,
         [employee.id, payrun.pay_period_start, payrun.pay_period_end]
       );
 
-      const presentDays = attendanceRows[0].present_days || totalWorkingDays;
-      const paidDays = Math.min(presentDays, totalWorkingDays);
+      const presentDays = attendanceRows[0].present_days || 0;
+      const halfDays = attendanceRows[0].half_days || 0;
+      const absentDays = attendanceRows[0].absent_days || 0;
+      
+      // Calculate paid days based on settings
+      let paidDays = presentDays;
+      if (considerHalfDays) {
+        paidDays += (halfDays * 0.5); // Half days count as 0.5
+      }
+      
+      // Cap paid days at total working days
+      paidDays = Math.min(paidDays, totalWorkingDays);
 
-      // Prorate salary based on attendance
-      const attendanceRatio = paidDays / totalWorkingDays;
+      // Calculate attendance ratio for salary proration
+      const attendanceRatio = deductAbsentDays ? (paidDays / totalWorkingDays) : 1;
       const proratedBasic = calculated.basic_salary * attendanceRatio;
       const proratedGross = calculated.gross_salary * attendanceRatio;
 
