@@ -2,6 +2,7 @@ const bcrypt = require("bcrypt");
 const { pool } = require("../config/database");
 const { bcryptSaltRounds } = require("../config/app");
 const { generateEmployeeId } = require("../utils/idGenerator");
+const { sendWelcomeEmail } = require("../utils/emailService");
 const companyModel = require("../models/companyModel");
 const userModel = require("../models/userModel");
 const employeeModel = require("../models/employeeModel");
@@ -322,9 +323,27 @@ async function addEmployee(req, res) {
 
     await connection.commit();
 
+    // Send welcome email with credentials (async, don't wait for it)
+    sendWelcomeEmail({
+      email,
+      first_name,
+      last_name,
+      employee_id,
+      password, // Send the plain password in email
+      company_name: companyRows[0].company_name
+    }).then(result => {
+      if (result.success) {
+        console.log(`✅ Welcome email sent to ${email}`);
+      } else {
+        console.error(`❌ Failed to send welcome email to ${email}:`, result.error);
+      }
+    }).catch(err => {
+      console.error(`❌ Error sending welcome email to ${email}:`, err);
+    });
+
     return res.json({
       ok: true,
-      message: "Employee added successfully",
+      message: "Employee added successfully. Welcome email sent to employee.",
       employee: {
         id: employee_id,
         company_id,
