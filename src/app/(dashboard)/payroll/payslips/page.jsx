@@ -83,6 +83,20 @@ export default function PayslipsPage() {
       render: (row) => row.department || 'N/A',
     },
     {
+      key: 'attendance',
+      label: 'Attendance',
+      render: (row) => (
+        <div className="text-sm">
+          <div className="font-medium">{row.paid_days || 0}/{row.total_working_days || 0}</div>
+          <div className="text-xs text-gray-500">
+            {row.total_working_days > 0 
+              ? `${((row.paid_days / row.total_working_days) * 100).toFixed(1)}%`
+              : '0%'}
+          </div>
+        </div>
+      ),
+    },
+    {
       key: 'net_salary',
       label: 'Net Pay',
       sortable: true,
@@ -232,6 +246,34 @@ export default function PayslipsPage() {
                     {selectedPayslip.paid_days} / {selectedPayslip.total_working_days} days
                   </div>
                 </div>
+              </div>
+
+              {/* Attendance Summary */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="font-semibold text-blue-900 mb-2">📊 Attendance Summary</h4>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="text-blue-700">Total Working Days</div>
+                    <div className="font-semibold text-lg">{selectedPayslip.total_working_days}</div>
+                  </div>
+                  <div>
+                    <div className="text-blue-700">Paid Days</div>
+                    <div className="font-semibold text-lg text-green-600">{selectedPayslip.paid_days}</div>
+                  </div>
+                  <div>
+                    <div className="text-blue-700">Attendance</div>
+                    <div className="font-semibold text-lg">
+                      {selectedPayslip.total_working_days > 0 
+                        ? `${((selectedPayslip.paid_days / selectedPayslip.total_working_days) * 100).toFixed(1)}%`
+                        : '0%'}
+                    </div>
+                  </div>
+                </div>
+                {selectedPayslip.paid_days < selectedPayslip.total_working_days && (
+                  <div className="mt-2 text-xs text-blue-700">
+                    ℹ️ Salary prorated based on {selectedPayslip.paid_days} paid days out of {selectedPayslip.total_working_days} working days
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-gray-300 pt-4">

@@ -49,6 +49,20 @@ export default function PayrollRunPage() {
     },
     { key: 'user_id', label: 'Emp ID', sortable: true },
     {
+      key: 'attendance',
+      label: 'Attendance',
+      render: (row) => (
+        <div className="text-sm">
+          <div className="font-medium">{row.paid_days || 0}/{row.total_working_days || 0} days</div>
+          <div className="text-xs text-gray-500">
+            {row.total_working_days > 0 
+              ? `${((row.paid_days / row.total_working_days) * 100).toFixed(1)}%`
+              : '0%'}
+          </div>
+        </div>
+      ),
+    },
+    {
       key: 'gross_salary',
       label: 'Gross',
       sortable: true,

@@ -44,8 +44,8 @@ export default function Sidebar({ isOpen, onClose }) {
         flex flex-col
       `}>
         <div className="p-6 border-b border-[#F2BED1]/30">
-          <h1 className="text-2xl font-bold text-[#1F2937]">HRMS</h1>
-          <p className="text-sm text-gray-600 mt-1">{user?.role || 'Management System'}</p>
+          <h1 className="text-2xl font-bold text-[#1F2937]">WorkZen India</h1>
+          <p className="text-sm text-gray-600 mt-1">{user?.role || 'HR Management'}</p>
         </div>
 
         <nav className="flex-1 p-4 overflow-y-auto">
@@ -74,7 +74,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
         <div className="p-4 border-t border-[#F2BED1]/30">
           <div className="text-xs text-gray-500 text-center">
-            © 2024 Healthcare HRMS
+            © 2025 WorkZen India
           </div>
         </div>
       </aside>
