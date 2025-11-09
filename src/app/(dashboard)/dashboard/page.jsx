@@ -5,7 +5,7 @@ import StatsCard from '@/components/StatsCard';
 import Card from '@/components/Card';
 import DataTable from '@/components/DataTable';
 import { BarChart } from '@/components/SimpleChart';
-import { stats, recentActivity } from '@/lib/mockData';
+import { reportsAPI, attendanceAPI, leaveAPI } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/AppContext';
 
@@ -15,6 +15,17 @@ export default function DashboardPage() {
   const [attendanceStatus, setAttendanceStatus] = useState(null);
   const [currentTime, setCurrentTime] = useState(null);
   const [mounted, setMounted] = useState(false);
+  
+  // Dashboard data states
+  const [stats, setStats] = useState({
+    total_employees: 0,
+    pending_leaves: 0,
+    today_attendance: 0,
+    recent_payruns: 0
+  });
+  const [weeklyAttendance, setWeeklyAttendance] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Set mounted state
   useEffect(() => {
@@ -29,21 +40,56 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [mounted]);
 
-  // Load today's attendance status
+  // Load dashboard data
   useEffect(() => {
-    if (!mounted || !user?.empId) return;
-    fetchTodayAttendance();
+    if (!mounted || !user?.companyId) return;
+    fetchDashboardData();
   }, [user, mounted]);
 
-  const fetchTodayAttendance = async () => {
-    if (!user?.empId) return;
+  const fetchDashboardData = async () => {
+    if (!user?.companyId) return;
     
-    const { attendanceAPI } = await import('@/lib/api');
-    const result = await attendanceAPI.getTodayStatus(user.empId);
+    setLoading(true);
     
-    if (result.success && result.attendance) {
-      setAttendanceStatus(result.attendance);
+    try {
+      // Fetch dashboard stats
+      const statsResult = await reportsAPI.getDashboardStats(user.companyId);
+      if (statsResult.success) {
+        setStats(statsResult.stats);
+      }
+      
+      // Fetch weekly attendance for chart
+      const attendanceResult = await reportsAPI.getAttendanceReport(user.companyId);
+      if (attendanceResult.success && attendanceResult.weeklyStats) {
+        setWeeklyAttendance(attendanceResult.weeklyStats);
+      }
+      
+      // Fetch recent leave requests for activity
+      const leaveResult = await leaveAPI.getLeaveRequests(user.companyId);
+      if (leaveResult.success && leaveResult.requests) {
+        // Transform to activity format
+        const activities = leaveResult.requests.slice(0, 10).map(leave => ({
+          action: `${leave.status === 'pending' ? 'Applied for' : leave.status === 'approved' ? 'Approved' : 'Rejected'} ${leave.leave_type}`,
+          employee: `${leave.first_name} ${leave.last_name}`,
+          date: new Date(leave.created_at).toLocaleString(),
+          type: 'leave'
+        }));
+        setRecentActivity(activities);
+      }
+      
+      // Fetch today's attendance status for current user
+      if (user?.empId) {
+        const todayResult = await attendanceAPI.getTodayStatus(user.empId);
+        if (todayResult.success && todayResult.attendance) {
+          setAttendanceStatus(todayResult.attendance);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      showToast('Failed to load dashboard data', 'error');
     }
+    
+    setLoading(false);
   };
 
   const handleCheckIn = async () => {
@@ -52,12 +98,11 @@ export default function DashboardPage() {
       return;
     }
 
-    const { attendanceAPI } = await import('@/lib/api');
     const result = await attendanceAPI.checkIn(user.empId, user.companyId);
     
     if (result.success) {
       showToast('Checked in successfully!', 'success');
-      fetchTodayAttendance();
+      fetchDashboardData(); // Refresh all data
     } else {
       showToast(result.error || 'Failed to check in', 'error');
     }
@@ -69,26 +114,21 @@ export default function DashboardPage() {
       return;
     }
 
-    const { attendanceAPI } = await import('@/lib/api');
     const result = await attendanceAPI.checkOut(user.empId, user.companyId);
     
     if (result.success) {
       showToast('Checked out successfully!', 'success');
-      fetchTodayAttendance();
+      fetchDashboardData(); // Refresh all data
     } else {
       showToast(result.error || 'Failed to check out', 'error');
     }
   };
 
-  const chartData = [
-    { label: 'Mon', value: 45 },
-    { label: 'Tue', value: 52 },
-    { label: 'Wed', value: 48 },
-    { label: 'Thu', value: 50 },
-    { label: 'Fri', value: 46 },
-    { label: 'Sat', value: 20 },
-    { label: 'Sun', value: 15 },
-  ];
+  // Transform weekly attendance data for chart
+  const chartData = weeklyAttendance.map((week, index) => ({
+    label: `Week ${index + 1}`,
+    value: parseFloat(week.attendance_rate || 0)
+  }));
 
   const activityColumns = [
     { key: 'action', label: 'Action', sortable: true },
@@ -110,16 +150,60 @@ export default function DashboardPage() {
     },
   ];
 
+  if (loading && !mounted) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#F2BED1] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-gray-600">Welcome back, {user?.name}!</p>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Welcome back, {user?.name}!</p>
+        </div>
         {mounted && currentTime && (
           <div className="text-sm text-gray-500">
             {currentTime.toLocaleDateString()} • {currentTime.toLocaleTimeString()}
           </div>
         )}
       </div>
+
+      {/* Stats Cards */}
+      {hasPermission('view_dashboard') && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatsCard
+            title="Total Employees"
+            value={stats.total_employees}
+            icon={<EmployeesIcon />}
+            color="blue"
+          />
+          <StatsCard
+            title="Pending Leaves"
+            value={stats.pending_leaves}
+            icon={<LeavesIcon />}
+            color="yellow"
+          />
+          <StatsCard
+            title="Today's Attendance"
+            value={stats.today_attendance}
+            icon={<ApprovalsIcon />}
+            color="green"
+          />
+          <StatsCard
+            title="Recent Payruns"
+            value={stats.recent_payruns}
+            icon={<PayrollIcon />}
+            color="purple"
+          />
+        </div>
+      )}
 
       {/* Check In/Out Card */}
       <Card className="p-6 bg-gradient-to-r from-[#F9F5F6] to-[#F8E8EE]">
@@ -186,8 +270,17 @@ export default function DashboardPage() {
       {/* Charts and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Weekly Attendance</h2>
-          <BarChart data={chartData} height={250} />
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Weekly Attendance Rate (%)</h2>
+          {chartData.length > 0 ? (
+            <BarChart data={chartData} height={250} />
+          ) : (
+            <div className="flex items-center justify-center h-[250px] text-gray-500">
+              <div className="text-center">
+                <p>No attendance data available</p>
+                <p className="text-sm mt-2">Start marking attendance to see the chart</p>
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card className="p-6">
@@ -230,10 +323,19 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
-        <DataTable columns={activityColumns} data={recentActivity} />
-      </Card>
+      {hasPermission('view_dashboard') && (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
+          {recentActivity.length > 0 ? (
+            <DataTable columns={activityColumns} data={recentActivity} />
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <p>No recent activity</p>
+              <p className="text-sm mt-2">Activity will appear here as employees use the system</p>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
