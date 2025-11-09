@@ -3,6 +3,11 @@ async function findUserByEmail(email, connection) {
   return rows;
 }
 
+// async function findUserByEmpID(empId, connection) {
+//   const [rows] = await connection.query("SELECT * FROM users WHERE employee_id = ?", [empId]);
+//   return rows;
+// }
+
 async function findUserByCompanyAndEmail(company_id, email, connection) {
   const [rows] = await connection.query(
     "SELECT id FROM users WHERE company_id = ? AND email = ?",
