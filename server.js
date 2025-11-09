@@ -10,6 +10,7 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 const leaveRoutes = require("./routes/leaveRoutes");
 const salaryRoutes = require("./routes/salaryRoutes");
 const payrollRoutes = require("./routes/payrollRoutes");
+const reportsRoutes = require("./routes/reportsRoutes");
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/", attendanceRoutes);
 app.use("/", leaveRoutes);
 app.use("/", salaryRoutes);
 app.use("/", payrollRoutes);
+app.use("/", reportsRoutes);
 
 app.listen(port, async () => {
   try {
