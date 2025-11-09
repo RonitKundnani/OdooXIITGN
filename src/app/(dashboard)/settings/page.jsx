@@ -1,21 +1,72 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/Card';
 import Tabs from '@/components/Tabs';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import { salaryAPI } from '@/lib/api';
 import { leaveTypes, shifts, salaryComponents } from '@/lib/mockData';
 import { useApp } from '@/context/AppContext';
 
 export default function SettingsPage() {
-  const { showToast } = useApp();
+  const { showToast, user } = useApp();
   const [activeTab, setActiveTab] = useState('company');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  // Payroll settings state
+  const [payrollSettings, setPayrollSettings] = useState({
+    payroll_pf_rate_employee: 12,
+    payroll_pf_rate_employer: 12,
+    payroll_professional_tax: 200,
+  });
+
+  useEffect(() => {
+    if (user?.companyId && activeTab === 'payroll') {
+      fetchPayrollSettings();
+    }
+  }, [user, activeTab]);
+
+  const fetchPayrollSettings = async () => {
+    if (!user?.companyId) return;
+    
+    setLoading(true);
+    const result = await salaryAPI.getPayrollSettings(user.companyId);
+    
+    if (result.success) {
+      setPayrollSettings(result.settings);
+    } else {
+      showToast(result.error || 'Failed to load payroll settings', 'error');
+    }
+    setLoading(false);
+  };
+
+  const handleSavePayrollSettings = async () => {
+    if (!user?.companyId || !user?.empId) {
+      showToast('User session invalid', 'error');
+      return;
+    }
+
+    setLoading(true);
+    const result = await salaryAPI.updatePayrollSettings(
+      user.companyId,
+      payrollSettings,
+      user.empId
+    );
+
+    if (result.success) {
+      showToast('Payroll settings saved successfully!', 'success');
+    } else {
+      showToast(result.error || 'Failed to save payroll settings', 'error');
+    }
+    setLoading(false);
+  };
 
   const tabs = [
     { id: 'company', label: 'Company' },
+    { id: 'payroll', label: 'Payroll Settings' },
     { id: 'leave-types', label: 'Leave Types' },
     { id: 'shifts', label: 'Shifts' },
     { id: 'salary', label: 'Salary Components' },
@@ -162,6 +213,122 @@ export default function SettingsPage() {
                 className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white font-medium px-6 py-2 rounded-lg"
               >
                 Save Changes
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'payroll' && (
+            <div className="max-w-2xl space-y-6">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                <h4 className="font-semibold text-blue-900 mb-2">ℹ️ About Payroll Settings</h4>
+                <p className="text-sm text-blue-800">
+                  These settings apply to all employees during payroll computation. Changes will affect future payroll runs.
+                </p>
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900">Provident Fund (PF) Rates</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Employee PF Contribution (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={payrollSettings.payroll_pf_rate_employee}
+                  onChange={(e) => setPayrollSettings({
+                    ...payrollSettings,
+                    payroll_pf_rate_employee: parseFloat(e.target.value) || 0
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1]"
+                  placeholder="12"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Standard rate is 12%. This will be deducted from employee's basic salary.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Employer PF Contribution (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={payrollSettings.payroll_pf_rate_employer}
+                  onChange={(e) => setPayrollSettings({
+                    ...payrollSettings,
+                    payroll_pf_rate_employer: parseFloat(e.target.value) || 0
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1]"
+                  placeholder="12"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Standard rate is 12%. This is paid by the employer (not deducted from salary).
+                </p>
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900 mt-8">Tax Deductions</h3>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Professional Tax (₹)
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={payrollSettings.payroll_professional_tax}
+                  onChange={(e) => setPayrollSettings({
+                    ...payrollSettings,
+                    payroll_professional_tax: parseFloat(e.target.value) || 0
+                  })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F2BED1]"
+                  placeholder="200"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Fixed monthly professional tax amount. Standard is ₹200 per month.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-semibold text-gray-900 mb-3">Example Calculation</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Basic Salary:</span>
+                    <span className="font-medium">₹30,000</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Employee PF ({payrollSettings.payroll_pf_rate_employee}%):</span>
+                    <span className="font-medium text-red-600">-₹{(30000 * payrollSettings.payroll_pf_rate_employee / 100).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Employer PF ({payrollSettings.payroll_pf_rate_employer}%):</span>
+                    <span className="font-medium text-blue-600">₹{(30000 * payrollSettings.payroll_pf_rate_employer / 100).toFixed(2)} (Company pays)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Professional Tax:</span>
+                    <span className="font-medium text-red-600">-₹{payrollSettings.payroll_professional_tax}</span>
+                  </div>
+                  <div className="border-t border-gray-300 pt-2 mt-2 flex justify-between">
+                    <span className="font-semibold text-gray-900">Total Deductions:</span>
+                    <span className="font-semibold text-red-600">
+                      ₹{((30000 * payrollSettings.payroll_pf_rate_employee / 100) + payrollSettings.payroll_professional_tax).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSavePayrollSettings}
+                disabled={loading}
+                className="bg-[#F2BED1] hover:bg-[#FDCEDF] text-white font-medium px-6 py-2 rounded-lg disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Save Payroll Settings'}
               </button>
             </div>
           )}

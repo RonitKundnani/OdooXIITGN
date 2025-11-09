@@ -941,3 +941,139 @@ export const payrollAPI = {
     }
   },
 };
+
+
+export const reportsAPI = {
+  async getAttendanceReport(company_id: number, start_date?: string, end_date?: string) {
+    try {
+      let url = `${API_BASE_URL}/reports/attendance?company_id=${company_id}`;
+      if (start_date) url += `&start_date=${start_date}`;
+      if (end_date) url += `&end_date=${end_date}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch attendance report');
+      }
+
+      return {
+        success: true,
+        attendance: data.attendance || [],
+        weeklyStats: data.weeklyStats || [],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        attendance: [],
+        weeklyStats: [],
+      };
+    }
+  },
+
+  async getLeaveReport(company_id: number, start_date?: string, end_date?: string, status?: string) {
+    try {
+      let url = `${API_BASE_URL}/reports/leave?company_id=${company_id}`;
+      if (start_date) url += `&start_date=${start_date}`;
+      if (end_date) url += `&end_date=${end_date}`;
+      if (status) url += `&status=${status}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch leave report');
+      }
+
+      return {
+        success: true,
+        leaves: data.leaves || [],
+        distribution: data.distribution || [],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        leaves: [],
+        distribution: [],
+      };
+    }
+  },
+
+  async getPayrollReport(company_id: number, start_date?: string, end_date?: string) {
+    try {
+      let url = `${API_BASE_URL}/reports/payroll?company_id=${company_id}`;
+      if (start_date) url += `&start_date=${start_date}`;
+      if (end_date) url += `&end_date=${end_date}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch payroll report');
+      }
+
+      return {
+        success: true,
+        payslips: data.payslips || [],
+        trends: data.trends || [],
+        totals: data.totals || { total_gross: 0, total_deductions: 0, total_net: 0, employee_count: 0 },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        payslips: [],
+        trends: [],
+        totals: { total_gross: 0, total_deductions: 0, total_net: 0, employee_count: 0 },
+      };
+    }
+  },
+
+  async getDashboardStats(company_id: number) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/reports/dashboard-stats?company_id=${company_id}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch dashboard stats');
+      }
+
+      return {
+        success: true,
+        stats: data.stats || {},
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'An error occurred',
+        stats: {},
+      };
+    }
+  },
+};
